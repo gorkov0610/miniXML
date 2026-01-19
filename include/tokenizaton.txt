@@ -1,0 +1,32 @@
+/******************************************************************************
+
+                              Online C++ Compiler.
+               Code, Compile, Run and Debug C++ program online.
+Write your code in this editor and press "Run" button to compile and execute it.
+
+*******************************************************************************/
+
+#include <iostream>
+#include <regex>
+#include <vector>
+
+using namespace std;
+int main()
+{
+    string line = "<?xml version='1.1' encoding='UTF-8'?>\n<name> hello </name>";
+
+    regex re(R"(([^<>\t\n ]+)|([<>\t\n ]+))");
+
+    sregex_token_iterator it(line.begin(), line.end(), re, {1, 2});
+    sregex_token_iterator end;
+
+    vector<string> tokens;
+    for (; it != end; ++it) {
+        if (!it->str().empty() && it->str() != " ")
+            tokens.push_back(it->str());
+    }
+
+    for (auto& t : tokens) {
+        cout << t << '\n';
+    }
+}
