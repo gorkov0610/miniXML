@@ -13,21 +13,13 @@ namespace miniXML{
         lt, gt, slash, equals,
         identifier, 
         string,
-        text
+        question
     };
     enum node_type{
         ELEMENT_NODE = 1,
         ATTRIBUTE_NODE,
         TEXT_NODE,
-        CDATA_SECTION_NODE,
-        ENTITY_REFERENCE_NODE,
-        ENTITY_NODE,
-        PROCESSING_INSTRUCTION_NODE,
-        COMMENT_NODE,
         DOCUMENT_NODE,
-        DOCUMENT_TYPE_NODE, 
-        DOCUMENT_FRAGMENT_NODE,
-        NOTATION_NODE
     };
 
     struct token
@@ -50,6 +42,9 @@ namespace miniXML{
             const std::vector<std::unique_ptr<node>>& getChildren() const {
                 return children;
             }
+            node* getParrent(){
+                return parrent;
+            }
             void setType(const node_type n){
                 type = n;
             }
@@ -58,8 +53,8 @@ namespace miniXML{
             }
 
             node* appendChild(std::unique_ptr<node> n){
+                n->parrent = this;
                 children.push_back(std::move(n));
-
                 return children.back().get();
             }
             bool deleteChild(const std::string& name){
@@ -67,6 +62,7 @@ namespace miniXML{
                     return name == n->value;
                 });
                 if(it != children.end()){
+                    (*it)->parrent = nullptr;
                     children.erase(it);
                     return true;
                 }
@@ -77,6 +73,7 @@ namespace miniXML{
                     return type == n->type;
                 });
                 if(it != children.end()){
+                    (*it)->parrent = nullptr;
                     children.erase(it);
                     return true;
                 }
@@ -86,7 +83,9 @@ namespace miniXML{
                 auto it = std::find_if(children.begin(), children.end(), [&n](const std::unique_ptr<node>& c){
                     return n.value == c->value && n.type == c->type;
                 });
+                
                 if(it != children.end()){
+                    (*it)->parrent = nullptr;
                     children.erase(it);
                     return true;
                 }
@@ -177,11 +176,15 @@ namespace miniXML{
             node_type type;
             std::string value;
             std::vector<std::unique_ptr<node>> children;
+            node* parrent = nullptr;
     };
     class document{
         public:
             document(const std::string& filepath) : root(DOCUMENT_NODE, "") {
-                const std::ifstream f(filepath);
+                std::ifstream f(filepath);
+                if(!f){
+                    throw std::runtime_error("Failed to open file");
+                }
                 std::stringstream buffer;
                 
                 buffer << f.rdbuf();
@@ -198,29 +201,16 @@ namespace miniXML{
             }
             void writeToFile(const std::string& filepath){
                 std::ofstream file(filepath);
+                file << "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n";
                 for(const auto& c : root.getChildren()){
                     writeNode(*c, file);    
                 }
             }
-            void writeNode(const node& n, std::ofstream& file){
-                switch (n.getType())
-                {
-                case PROCESSING_INSTRUCTION_NODE:{
-                    file << "<?" << n.getValue();
-
-                    for(const auto& a : n.findChildren(ATTRIBUTE_NODE)){
-                        file << ' ' << a->getValue() << "=\"";
-
-                        for(const auto& t : a->getChildren()){
-                            file << t->getValue();
-                        }
-                        file << "\"";
-                    }
-                    file << "?>\n";
-                    break;
-                }
+            void writeNode(const node& n, std::ofstream& file, int depth = 0){
+                const std::string ind(depth * 2, ' ');
+                switch (n.getType()){
                 case ELEMENT_NODE:{
-                    file << "<" << n.getValue();
+                    file << ind << "<" << n.getValue();
                     const auto childrenElements = n.findChildren(ELEMENT_NODE);
                     const auto childrenText = n.findChildren(TEXT_NODE);
 
@@ -244,17 +234,17 @@ namespace miniXML{
                     file << ">\n";
 
                     for(const auto& t : childrenText){
-                        file << t->getValue();
+                        file << std::string((depth + 1) * 2, ' ') << t->getValue() << '\n';
                     }
 
                     for(const auto& e : childrenElements){
-                        writeNode(*e, file);
+                        writeNode(*e, file, depth + 1);
                     }
-                    file << "</" + n.getValue() + ">\n";
+                    file << ind << "</" + n.getValue() + ">\n";
                     break;
                 }
                 case TEXT_NODE:{
-                    file << n.getValue();
+                    file << ind << n.getValue() << std::endl;
                     break;
                 }
                 default:
@@ -297,11 +287,15 @@ namespace miniXML{
                             tokens.push_back({slash, "/"});
                             i++;
                             break;
+                        case '?':
+                            tokens.push_back({question, "?"});
+                            i++;
+                            break;
                         default:
                             if(std::isspace(file[i])){
                                 i++;
                             }else{
-                                while(i < file.size() && !std::isspace(file[i]) && file[i] != '<' && file[i] != '>' && file[i] != '=' && file[i] != '/'){
+                                while(i < file.size() && !std::isspace(file[i]) && file[i] != '<' && file[i] != '>' && file[i] != '=' && file[i] != '/' && file[i] != '?'){
                                     s += file[i++];
                                 }
                                 tokens.push_back({identifier, s});
@@ -313,87 +307,74 @@ namespace miniXML{
             }
 
             void buildTree(){
-                std::stack<node*> stack;
-                stack.push(&root);
-                for(auto i{0}; i < tokens.size(); i++){
-                    const auto& t = tokens[i];
-                    if(t.type == lt){
-                        if(tokens[i + 1].type == identifier && tokens[i + 1].value[0] == '?' && !tokens[i + 1].value.empty()){
-                        ++i;
-                        std::string pi = tokens[i].value.substr(1);
-
-                        auto piNode = std::make_unique<node>(PROCESSING_INSTRUCTION_NODE, pi);
-
-                        while(i + 2 < tokens.size() && tokens[i].type == identifier && tokens[i + 1].type == equals && tokens[i + 2].type == string){
-                            ++i;
-                            std::string attName = tokens[i].value;
-                            i += 2;
-                            std::string attValue = tokens[i].value;
-                            auto attribute = std::make_unique<node>(ATTRIBUTE_NODE, attName);
-                            attribute->appendChild(std::make_unique<node>(TEXT_NODE, attValue));
-                            ++i;
-                            piNode->appendChild(std::move(attribute));
+                auto i{0};
+                while(i < tokens.size()){
+                    if(tokens[i].type == lt && tokens[i + 1].type == identifier){
+                        auto child = parseElement(i);
+                        if(child){
+                            root.appendChild(std::move(child));
                         }
-                        ++i;
-                        root.appendChild(std::move(piNode));
-                        continue;
+                    }else{
+                        i++;
                     }
-                        if(tokens[i + 1].type == slash) {
-                            i += 2;
-                            if(i + 1 < tokens.size() && tokens[i + 1].type == gt) i++;
-                            if(stack.size() > 1) stack.pop();
-                            continue;
-                        }
-                        std::string name = tokens[++i].value;
-
-                        auto element = std::make_unique<node>(ELEMENT_NODE, name);
-
-                        while(i + 1 < tokens.size() && tokens[i + 1].type != gt && tokens[i + 1].type != slash){
-                            ++i;
-                            std::string attName = tokens[i].value;
-                            if(tokens[i + 1].type == equals){
-                                i += 2;
-                                std::string attValue = tokens[i].value;
-                                auto attribute = std::make_unique<node>(ATTRIBUTE_NODE, attName);
-                                auto value = std::make_unique<node>(TEXT_NODE, attValue);
-                                attribute->appendChild(std::move(value));
-                                element->appendChild(std::move(attribute));
-                            }
-                        }
-                        bool selfClosing = false;
-                        if(i + 1 < tokens.size() && tokens[i + 1].type == slash){
-                            selfClosing = true;
-                            i++; 
-                        }
-                        if(i + 1 < tokens.size() && tokens[i + 1].type == gt){
-                            i++;
-                        }
-
-                        node* elemPtr = stack.top()->appendChild(std::move(element));
-
-                        if(!selfClosing){
-                            stack.push(elemPtr);
-                        }
-                    }else if(t.type == slash){
-                        if(i + 1 < tokens.size() && tokens[i + 1].type == identifier){
-                            i++;
-                        }
-                        if(i + 1 < tokens.size() && tokens[i + 1].type == gt){
-                            i++;
-                        }
-                        if(stack.size() > 1){
-                            stack.pop();
-                        }
-                        continue;
-                    }else if(t.type == string || t.type == identifier){
-                        std::string text = t.value;
-                        while(i + 1 < tokens.size() && (tokens[i + 1].type == identifier || tokens[i + 1].type == string)){
-                            text += ' ' + tokens[++i].value;
-                        }
-                        stack.top()->appendChild(std::make_unique<node>(TEXT_NODE, text));
-                    }
-                    
                 }
+            }
+            std::unique_ptr<node> parseElement(int& i){
+                if(i + 1 >= tokens.size() && tokens[i].type != lt){
+                    return nullptr;
+                }
+                ++i;
+
+                std::string name = tokens[i++].value;
+                auto element = std::make_unique<node>(ELEMENT_NODE, name);
+                while(i < tokens.size() && tokens[i].type == identifier){
+                    std::string attName = tokens[i++].value;
+                    if(i < tokens.size() && tokens[i].type == equals){
+                        ++i;
+                        std::string attValue = tokens[i++].value;
+                        
+                        auto attribute = std::make_unique<node>(ATTRIBUTE_NODE, attName);
+                        attribute->appendChild(std::make_unique<node>(TEXT_NODE, attValue));
+                        element->appendChild(std::move(attribute));
+                    }
+                }
+
+                if(i + 1 < tokens.size() && tokens[i].type == slash && tokens[i + 1].type == gt){
+                    i += 2;
+                    return element;
+                }
+                if(i < tokens.size() && tokens[i].type == gt){
+                    i++;
+                }
+                while(i + 1 < tokens.size() && !(tokens[i].type == lt && tokens[i + 1].type == slash)){
+                    if(tokens[i].type == lt && tokens[i + 1].type == identifier){
+                        element->appendChild(parseElement(i));
+                    }else if(tokens[i].type == string || tokens[i].type == identifier){
+                        std::string text;
+                        while(i < tokens.size() && (tokens[i].type == string || tokens[i].type == identifier)){
+                            text += tokens[i++].value + ' ';
+                        }
+                        if(!text.empty()){
+                            text.pop_back();
+                        }
+                        element->appendChild(std::make_unique<node>(TEXT_NODE, text));
+                    }else{
+                        i++;
+                    }
+                }
+                if(i < tokens.size()){
+                    i++;
+                }
+                if(i < tokens.size()){
+                    i++;
+                }
+                if(i < tokens.size()){
+                    i++;
+                }
+                if(i < tokens.size()){
+                    i++;
+                }
+                return element;
             }
    };
 }
