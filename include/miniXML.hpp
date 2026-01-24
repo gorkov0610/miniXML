@@ -13,13 +13,16 @@ namespace miniXML{
         lt, gt, slash, equals,
         identifier, 
         string,
-        question
+        question,
+        dash,
+        exclamation
     };
     enum node_type{
         ELEMENT_NODE = 1,
         ATTRIBUTE_NODE,
         TEXT_NODE,
         DOCUMENT_NODE,
+        COMMENT_NODE
     };
 
     struct token
@@ -199,11 +202,11 @@ namespace miniXML{
             const node& rootNode() const{
                 return root;
             }
-            void writeToFile(const std::string& filepath){
+            void writeToFile(const std::string& filepath, int depth = 0){
                 std::ofstream file(filepath);
                 file << "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n";
                 for(const auto& c : root.getChildren()){
-                    writeNode(*c, file);    
+                    writeNode(*c, file, depth);    
                 }
             }
             void writeNode(const node& n, std::ofstream& file, int depth = 0){
@@ -213,6 +216,7 @@ namespace miniXML{
                     file << ind << "<" << n.getValue();
                     const auto childrenElements = n.findChildren(ELEMENT_NODE);
                     const auto childrenText = n.findChildren(TEXT_NODE);
+                    const auto childrenComments = n.findChildren(COMMENT_NODE);
 
                     for(const auto& a : n.findChildren(ATTRIBUTE_NODE)){
                         file << ' ' << a->getValue() << "=\"";
@@ -226,12 +230,15 @@ namespace miniXML{
                         file << helper + '\"';
                     }
 
-                    if(childrenElements.empty() && childrenText.empty()){
+                    if(childrenElements.empty() && childrenText.empty() && childrenComments.empty()){
                         file << "/>\n";
                         return;
                     }
 
                     file << ">\n";
+                    for(const auto& c : childrenComments){
+                        file << std::string((depth + 1) * 2, ' ') << "<!--" << c->getValue() << "-->\n";
+                    }
 
                     for(const auto& t : childrenText){
                         file << std::string((depth + 1) * 2, ' ') << t->getValue() << '\n';
@@ -241,6 +248,11 @@ namespace miniXML{
                         writeNode(*e, file, depth + 1);
                     }
                     file << ind << "</" + n.getValue() + ">\n";
+                    break;
+                }
+                case COMMENT_NODE:{
+                    std::cout << "a comment\n";
+                    file << ind << "<!--" << n.getValue() << "-->" << std::endl;
                     break;
                 }
                 case TEXT_NODE:{
@@ -291,11 +303,21 @@ namespace miniXML{
                             tokens.push_back({question, "?"});
                             i++;
                             break;
+                        case '-':
+                            //std::cout<<"a dash\n";
+                            tokens.push_back({dash, "-"});
+                            i++;
+                            break;
+                        case '!':
+                            //std::cout << "an exclamation\n";
+                            tokens.push_back({exclamation, "!"});
+                            i++;
+                            break;
                         default:
                             if(std::isspace(file[i])){
                                 i++;
                             }else{
-                                while(i < file.size() && !std::isspace(file[i]) && file[i] != '<' && file[i] != '>' && file[i] != '=' && file[i] != '/' && file[i] != '?'){
+                                while(i < file.size() && !std::isspace(file[i]) && file[i] != '<' && file[i] != '>' && file[i] != '=' && file[i] != '/' && file[i] != '?' && file[i] != '-'){
                                     s += file[i++];
                                 }
                                 tokens.push_back({identifier, s});
@@ -314,6 +336,15 @@ namespace miniXML{
                         if(child){
                             root.appendChild(std::move(child));
                         }
+                    }else if(i + 1 < tokens.size() && tokens[i].type == lt && tokens[i + 1].type == exclamation){
+                        i += 4;
+                        std::string comment;
+                        while(i + 1 < tokens.size() && tokens[i].type != dash){
+                            comment += tokens[i].value + " ";
+                            ++i;
+                        }
+                        auto commentNode = std::make_unique<node>(COMMENT_NODE, comment);
+                        root.appendChild(std::move(commentNode));
                     }else{
                         i++;
                     }
@@ -338,7 +369,6 @@ namespace miniXML{
                         element->appendChild(std::move(attribute));
                     }
                 }
-
                 if(i + 1 < tokens.size() && tokens[i].type == slash && tokens[i + 1].type == gt){
                     i += 2;
                     return element;
@@ -346,6 +376,17 @@ namespace miniXML{
                 if(i < tokens.size() && tokens[i].type == gt){
                     i++;
                 }
+                if(i + 1 < tokens.size() && tokens[i].type == lt && tokens[i + 1].type == exclamation){
+                    i += 4;
+                    std::string comment;
+                    while(i + 1 < tokens.size() && tokens[i].type != dash){
+                        comment += tokens[i].value + " ";
+                        ++i;
+                    }
+                    auto commentNode = std::make_unique<node>(COMMENT_NODE, comment);
+                    element->appendChild(std::move(commentNode));
+                }
+
                 while(i + 1 < tokens.size() && !(tokens[i].type == lt && tokens[i + 1].type == slash)){
                     if(tokens[i].type == lt && tokens[i + 1].type == identifier){
                         element->appendChild(parseElement(i));
