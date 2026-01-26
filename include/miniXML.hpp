@@ -195,6 +195,8 @@ namespace miniXML{
                 tokenize();
                 buildTree();
             }
+            document() : root(DOCUMENT_NODE, ""){}
+
             node& rootNode(){
                 return root;
             }
@@ -206,6 +208,12 @@ namespace miniXML{
                 for(const auto& c : root.getChildren()){
                     writeNode(*c, file, depth);    
                 }
+            }
+
+            void parseFromString(std::string& xmlContent){
+                file = xmlContent;
+                tokenize();
+                buildTree();
             }
         private:
             node root;
@@ -347,9 +355,9 @@ namespace miniXML{
                 }
 
                 while(i + 1 < tokens.size() && !(tokens[i].type == lt && tokens[i + 1].type == slash)){
-                    if(tokens[i].type == lt && tokens[i + 1].type == identifier){
+                    if(tokens[i].type == lt && (tokens[i + 1].type == identifier || tokens[i + 1].type == string)){
                         element->appendChild(parseElement(i));
-                    }else if(tokens[i].type == string && tokens[i + 1].type != dash){
+                    }else if(tokens[i].type == identifier && tokens[i + 1].type != dash){
                         std::string text;
                         while(i < tokens.size() && (tokens[i].type == string || tokens[i].type == identifier)){
                             text += tokens[i++].value + ' ';
@@ -386,11 +394,6 @@ namespace miniXML{
                 case ELEMENT_NODE:{
                     file << ind << "<" << n.getValue();
                     
-                    if(n.getChildren().empty()){
-                        file << "/>\n";
-                        return;
-                    }
-                    
                     for(const auto& a : n.findChildren(ATTRIBUTE_NODE)){
                         file << ' ' << a->getValue() << "=\"";
                         std::string helper;
@@ -402,14 +405,20 @@ namespace miniXML{
                         }
                         file << helper + '\"';
                     }
-
-
+    
+                    if(n.findChildren(TEXT_NODE).empty() && n.findChildren(ELEMENT_NODE).empty()){
+                        file << "/>\n";
+                        return;
+                    }
+                    
                     file << ">\n";
+
                     for(const auto& c : n.getChildren()){
                         if(c->getType() != ATTRIBUTE_NODE){
                             writeNode(*c, file, depth + 1);
                         }
                     }
+
                     file << ind << "</" + n.getValue() + ">\n";
                     break;
                 }
