@@ -53,6 +53,82 @@ namespace miniXML{
             void setValue(const std::string& n){
                 value = n;
             }
+            std::string toString(int depth = 0) const {
+                const std::string ind(depth * 2, ' ');
+                std::string xml = "";
+                xml += ind;
+                switch (type){
+                    case TEXT_NODE:{
+                        xml += value + '\n';
+                        break;
+                    }
+                    case ATTRIBUTE_NODE:{
+                        if(!children.empty()){
+                            xml += value + "=\"" + children.front()->getValue() + "\"";
+                        }else{
+                            xml += value + "=\"" + "\"";
+                        }
+                        break;
+                    }
+                    case PROCESSING_INSTRUCTION_NODE:{
+                        xml += "<?" + value + "?>\n";
+                        break;
+                    }
+                    case COMMENT_NODE:{
+                        std::string comment = value;
+                        if(!comment.empty()){
+                            comment.pop_back();
+                        }
+                        xml += "<!--" + comment + "-->\n";
+                        break;
+                    }
+                    case ELEMENT_NODE:{
+                        std::string element = "<" + value;
+
+                        for(const auto& a : this->findChildren(ATTRIBUTE_NODE)){
+                                element += " " + a->getValue() + "=\"";
+                                for(const auto& v : a->getChildren()){
+                                    element += v->getValue() + ",";
+                                }
+                                element.pop_back();
+                                element += "\"";
+                        }
+                        
+                        bool selfClosing = true;
+                        for(const auto& c : children){
+                            if(c->getType() != ATTRIBUTE_NODE){
+                                selfClosing = false;
+                                break;
+                            }
+                        }
+
+                        if(selfClosing){
+                            xml += element + "/>\n";
+                            break;
+                        }
+
+                        element += ">\n";
+
+                        for(const auto& c : children){
+                            if(c->getType() != ATTRIBUTE_NODE){
+                                element += c->toString(depth + 1);
+                            }
+                        }
+
+                        element += ind +"</" + value + ">\n";
+                        xml += element;
+
+                        break;
+                    }
+                    default:{
+                        for(const auto& c : children){
+                            xml += c->toString(depth); 
+                        }
+                        break;
+                    }    
+                }
+                return xml;
+            }
 
             node* appendChild(std::unique_ptr<node> n){
                 n->parrent = this;
@@ -92,6 +168,9 @@ namespace miniXML{
                     return true;
                 }
                 return false;
+            }
+            void clearChildren(){
+                children.clear();
             }
             node* findChild(const node_type t){
                 const auto it = std::find_if(children.begin(), children.end(), [t](const std::unique_ptr<node>&n){
@@ -212,6 +291,8 @@ namespace miniXML{
 
             void parseFromString(std::string& xmlContent){
                 file = xmlContent;
+                tokens.clear();
+                root.clearChildren();
                 tokenize();
                 buildTree();
             }
@@ -375,6 +456,23 @@ namespace miniXML{
                         }
                         auto commentNode = std::make_unique<node>(COMMENT_NODE, comment);
                         element->appendChild(std::move(commentNode));
+                    }else if(i + 1 < tokens.size() && tokens[i].type == lt && tokens[i + 1].type == question){
+                        i += 2;
+                        std::string pi;
+                        while(i + 1 < tokens.size() && tokens[i].type != question){
+                            if(tokens[i].type == identifier && tokens[i + 1].type == equals){
+                                pi += " " + tokens[i].value;
+                            }else if(tokens[i].type == equals){
+                                pi += tokens[i].value + "\"";
+                            }else if(tokens[i].type == string){
+                                pi += tokens[i].value + "\"";
+                            }else{
+                                pi += tokens[i].value;
+                            }
+                            i++;
+                        }
+                        auto piNode = std::make_unique<node>(PROCESSING_INSTRUCTION_NODE, pi);
+                        element->appendChild(std::move(piNode));
                     }else{
                         i++;
                     }
@@ -396,21 +494,25 @@ namespace miniXML{
                     
                     for(const auto& a : n.findChildren(ATTRIBUTE_NODE)){
                         file << ' ' << a->getValue() << "=\"";
-                        std::string helper;
-                        for(const auto& v : a->getChildren()){
-                            helper += v->getValue() + ',';
+                        if(!a->getChildren().empty()){
+                            file << a->getChildren().front()->getValue();
+                        }else{
+                            file << "\"";
                         }
-                        if(!helper.empty()){
-                            helper.pop_back();
-                        }
-                        file << helper + '\"';
                     }
-    
-                    if(n.findChildren(TEXT_NODE).empty() && n.findChildren(ELEMENT_NODE).empty()){
+
+                    bool selfClosing = true;
+                    for(const auto& c : n.getChildren()){
+                        if(c->getType() != ATTRIBUTE_NODE){
+                            selfClosing = false;
+                            break;
+                        }
+                    }
+
+                    if(selfClosing){
                         file << "/>\n";
                         return;
                     }
-                    
                     file << ">\n";
 
                     for(const auto& c : n.getChildren()){
@@ -423,7 +525,11 @@ namespace miniXML{
                     break;
                 }
                 case COMMENT_NODE:{
-                    file << ind << "<!--" << n.getValue() << "-->" << std::endl;
+                    std::string comment = n.getValue();
+                    if(!comment.empty()){
+                        comment.pop_back();
+                    }
+                    file << ind << "<!--" << comment << "-->" << std::endl;
                     break;
                 }
                 case TEXT_NODE:{
@@ -432,6 +538,7 @@ namespace miniXML{
                 }
                 case PROCESSING_INSTRUCTION_NODE:{
                     file << ind << "<?" << n.getValue() << "?>\n";
+                    break;
                 }
                 default:
                     break;
