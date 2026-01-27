@@ -1,6 +1,8 @@
 #pragma once
 #include <vector>
 #include <memory>
+#include <unordered_map>
+#include <optional>
 #include <iostream>
 #include <fstream>
 #include <sstream>
@@ -17,15 +19,13 @@ namespace miniXML{
     };
     enum node_type{
         ELEMENT_NODE = 1,
-        ATTRIBUTE_NODE,
         TEXT_NODE,
         DOCUMENT_NODE,
         COMMENT_NODE,
         PROCESSING_INSTRUCTION_NODE
     };
 
-    struct token
-    {
+    struct token{
         token_type type;
         std::string value;
     };
@@ -47,6 +47,9 @@ namespace miniXML{
             node* getParrent(){
                 return parrent;
             }
+            const std::unordered_map<std::string, std::string>& getAttributes() const{
+                return attributes;
+            }
             void setType(const node_type n){
                 type = n;
             }
@@ -60,14 +63,6 @@ namespace miniXML{
                 switch (type){
                     case TEXT_NODE:{
                         xml += value + '\n';
-                        break;
-                    }
-                    case ATTRIBUTE_NODE:{
-                        if(!children.empty()){
-                            xml += value + "=\"" + children.front()->getValue() + "\"";
-                        }else{
-                            xml += value + "=\"" + "\"";
-                        }
                         break;
                     }
                     case PROCESSING_INSTRUCTION_NODE:{
@@ -85,34 +80,22 @@ namespace miniXML{
                     case ELEMENT_NODE:{
                         std::string element = "<" + value;
 
-                        for(const auto& a : this->findChildren(ATTRIBUTE_NODE)){
-                                element += " " + a->getValue() + "=\"";
-                                for(const auto& v : a->getChildren()){
-                                    element += v->getValue() + ",";
-                                }
-                                element.pop_back();
-                                element += "\"";
+                        for(const auto& a : attributes){
+                            element += " " + a.first + "=\"";
+                            element += a.second;
+                            element += "\"";
                         }
-                        
-                        bool selfClosing = true;
-                        for(const auto& c : children){
-                            if(c->getType() != ATTRIBUTE_NODE){
-                                selfClosing = false;
-                                break;
-                            }
-                        }
-
-                        if(selfClosing){
-                            xml += element + "/>\n";
-                            break;
+            
+                        if(children.empty()){
+                            element += "/>\n";
+                            xml += element;
+                            return xml;
                         }
 
                         element += ">\n";
 
                         for(const auto& c : children){
-                            if(c->getType() != ATTRIBUTE_NODE){
-                                element += c->toString(depth + 1);
-                            }
+                            element += c->toString(depth + 1);
                         }
 
                         element += ind +"</" + value + ">\n";
@@ -129,11 +112,21 @@ namespace miniXML{
                 }
                 return xml;
             }
-
+            void appendAttribute(const std::string& key, const std::string& value){
+                attributes[key] = value;
+            }
             node* appendChild(std::unique_ptr<node> n){
                 n->parrent = this;
                 children.push_back(std::move(n));
                 return children.back().get();
+            }
+            bool deleteAttribute(const std::string& key){
+                auto it = attributes.find(key);
+                if(it == attributes.end()){
+                    return false;
+                }
+                attributes.erase(it);
+                return false;
             }
             bool deleteChild(const std::string& name){
                 auto it = std::find_if(children.begin(), children.end(), [name](const std::unique_ptr<node>& n){
@@ -171,6 +164,16 @@ namespace miniXML{
             }
             void clearChildren(){
                 children.clear();
+            }
+            void clearAttributes(){
+                attributes.clear();
+            }
+            std::optional<std::string_view> getAttribute(const std::string& key) const{
+                auto it = attributes.find(key);
+                if(it == attributes.end()){
+                    return std::nullopt;
+                }
+                return it->second;
             }
             node* findChild(const node_type t){
                 const auto it = std::find_if(children.begin(), children.end(), [t](const std::unique_ptr<node>&n){
@@ -240,12 +243,6 @@ namespace miniXML{
                 }
                 return results;
             }
-            void printTree(int indent = 0) const {
-                std::cout << std::string(indent, ' ') << value << '\n';
-                for(const auto& c : children){
-                    c->printTree(indent + 2);
-                }
-            }
 
             bool operator==(const std::string& v) const {
                 return value == v;
@@ -257,6 +254,7 @@ namespace miniXML{
             node_type type;
             std::string value;
             std::vector<std::unique_ptr<node>> children;
+            std::unordered_map<std::string, std::string> attributes;
             node* parrent = nullptr;
     };
     class document{
@@ -406,16 +404,11 @@ namespace miniXML{
 
                 std::string name = tokens[i++].value;
                 auto element = std::make_unique<node>(ELEMENT_NODE, name);
-                while(i < tokens.size() && tokens[i].type == identifier){
+                while(i < tokens.size() && tokens[i].type == identifier && tokens[i + 1].type == equals){
                     std::string attName = tokens[i++].value;
-                    if(i < tokens.size() && tokens[i].type == equals){
-                        ++i;
-                        std::string attValue = tokens[i++].value;
-                        
-                        auto attribute = std::make_unique<node>(ATTRIBUTE_NODE, attName);
-                        attribute->appendChild(std::make_unique<node>(TEXT_NODE, attValue));
-                        element->appendChild(std::move(attribute));
-                    }
+                    ++i;
+                    std::string attValue = tokens[i++].value;
+                    element->appendAttribute(attName, attValue);
                 }
                 if(i + 1 < tokens.size() && tokens[i].type == slash && tokens[i + 1].type == gt){
                     i += 2;
@@ -492,33 +485,24 @@ namespace miniXML{
                 case ELEMENT_NODE:{
                     file << ind << "<" << n.getValue();
                     
-                    for(const auto& a : n.findChildren(ATTRIBUTE_NODE)){
-                        file << ' ' << a->getValue() << "=\"";
-                        if(!a->getChildren().empty()){
-                            file << a->getChildren().front()->getValue();
+                    for(const auto& a : n.getAttributes()){
+                        file << ' ' << a.first << "=\"";
+                        if(!a.second.empty()){
+                            file << a.second << "\"";
                         }else{
                             file << "\"";
                         }
                     }
 
-                    bool selfClosing = true;
-                    for(const auto& c : n.getChildren()){
-                        if(c->getType() != ATTRIBUTE_NODE){
-                            selfClosing = false;
-                            break;
-                        }
-                    }
-
-                    if(selfClosing){
+                    if(n.getChildren().empty()){
                         file << "/>\n";
-                        return;
+                        return;    
                     }
+                    
                     file << ">\n";
 
                     for(const auto& c : n.getChildren()){
-                        if(c->getType() != ATTRIBUTE_NODE){
-                            writeNode(*c, file, depth + 1);
-                        }
+                        writeNode(*c, file, depth + 1);
                     }
 
                     file << ind << "</" + n.getValue() + ">\n";
