@@ -190,7 +190,7 @@ namespace miniXML{
         return element;
     }
 
-    inline void document::writeNode(const node& n, std::ostream& file, int depth = 0) const {
+    inline void document::writeNode(const node& n, std::ostream& file, int depth) const {
         const std::string ind(depth * 2, ' ');
         switch (n.getType()){
         case details::node_type::ELEMENT_NODE:{

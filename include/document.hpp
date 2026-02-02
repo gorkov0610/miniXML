@@ -55,3 +55,5 @@ namespace miniXML{
             void writeNode(const node& n, std::ostream& file, int depth = 0) const;
    };
 }
+
+#include "parser.hpp"
