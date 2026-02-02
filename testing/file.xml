@@ -1,0 +1,18 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<?xml-stylesheet href='style.xsl' type='text/xsl'?>
+<!--This XML file is used for testing the parser-->
+<note>
+    <!--This is some comment-->
+    <from id='Bob'/>
+    <to id='Alice'/>
+    <text>
+        <?xml-stylesheet href='styleInText.xsl' type='text/xsl'?>
+        Hello world
+    </text>
+    <subject encoding='ASCII'>
+        <!--Another comment-->
+        XML
+    </subject>
+    <!--This should go before closing note-->
+</note>
+<!--A check whether the parser will see this comment-->
