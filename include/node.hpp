@@ -6,12 +6,14 @@
 #include <algorithm>
 #include "types.hpp"
 
+// Main tree implementation.
 namespace miniXML{  
     class node{
         public:
             //constructor
             node(details::node_type t, std::string v) : type(t), value(std::move(v)){}
 
+            //getters
             details::node_type getType() const noexcept {
                 return type;
             }
@@ -30,6 +32,7 @@ namespace miniXML{
             const std::unordered_map<std::string, std::string>& getAttributes() const{
                 return attributes;
             }
+            //setters
             void setType(const details::node_type n) noexcept {
                 type = n;
             }
@@ -52,7 +55,7 @@ namespace miniXML{
                     case details::node_type::COMMENT_NODE:{
                         std::string comment = value;
                         if(!comment.empty()){
-                            comment.pop_back();
+                            comment.pop_back();// pop the whitespace added in the parsing process
                         }
                         xml += "<!--" + comment + "-->\n";
                         break;

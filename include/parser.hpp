@@ -1,6 +1,7 @@
 #pragma once
 #include "document.hpp"
-
+// Internal implementation of miniXML::document parsing and serialization.
+// Separated to keep document.hpp minimal and stable.
 namespace miniXML{
     inline void document::tokenize(){
         int i = 0;
@@ -68,16 +69,16 @@ namespace miniXML{
                     root.appendChild(std::move(child));
                 }
             }else if(i + 1 < tokens.size() && tokens[i].type == details::token_type::lt && tokens[i + 1].type == details::token_type::exclamation){
-                i += 4;
+                i += 4;// skip <!--
                 std::string comment;
                 while(i + 2 < tokens.size() && tokens[i].type != details::token_type::dash && tokens[i + 1].type != details::token_type::dash && tokens[i + 2].type != details::token_type::gt){
                     comment += tokens[i++].value + " ";
                 }
-                i += 3;
+                i += 3;// skip -->
                 auto commentNode = std::make_unique<node>(details::node_type::COMMENT_NODE, comment);
                 root.appendChild(std::move(commentNode));
             }else if(i + 1 < tokens.size() && tokens[i].type == details::token_type::lt && tokens[i + 1].type == details::token_type::question){
-                i += 2;
+                i += 2;// skip <?
                 std::string pi;
                 while(i + 1 < tokens.size() && tokens[i].type != details::token_type::question){
                     if(tokens[i].type == details::token_type::identifier && tokens[i + 1].type == details::token_type::equals){
@@ -94,7 +95,7 @@ namespace miniXML{
                 auto piNode = std::make_unique<node>(details::node_type::PROCESSING_INSTRUCTION_NODE, pi);
                 root.appendChild(std::move(piNode));
             }else{
-                i++;
+                i++;// go on the next token
             }
         }
     }
@@ -109,24 +110,24 @@ namespace miniXML{
         auto element = std::make_unique<node>(details::node_type::ELEMENT_NODE, name);
         while(i + 1 < tokens.size() && tokens[i].type == details::token_type::identifier && tokens[i + 1].type == details::token_type::equals){
             std::string attName = tokens[i++].value;
-            ++i;
+            ++i;// skip the =
             std::string attValue = tokens[i++].value;
             element->appendAttribute(attName, attValue);
         }
         if(i + 1 < tokens.size() && tokens[i].type == details::token_type::slash && tokens[i + 1].type == details::token_type::gt){
-            i += 2;
+            i += 2;// skip />
             return element;
         }
         if(i < tokens.size() && tokens[i].type == details::token_type::gt){
             i++;
         }
         if(i + 1 < tokens.size() && tokens[i].type == details::token_type::lt && tokens[i + 1].type == details::token_type::exclamation){
-            i += 4;
+            i += 4;// skip <!--
             std::string comment;
             while(i + 2 < tokens.size() && tokens[i].type != details::token_type::dash && tokens[i + 1].type != details::token_type::dash && tokens[i + 2].type != details::token_type::gt){
                     comment += tokens[i++].value + " ";
             }
-            i += 3;
+            i += 3;// skip -->
             auto commentNode = std::make_unique<node>(details::node_type::COMMENT_NODE, comment);
             element->appendChild(std::move(commentNode));
         }
@@ -144,16 +145,16 @@ namespace miniXML{
                 }
                 element->appendChild(std::make_unique<node>(details::node_type::TEXT_NODE, text));
             }else if(i + 1 < tokens.size() && tokens[i].type == details::token_type::lt && tokens[i + 1].type == details::token_type::exclamation){
-                i += 4;
+                i += 4;//skip <!--
                 std::string comment;
                 while(i + 2 < tokens.size() && tokens[i].type != details::token_type::dash && tokens[i + 1].type != details::token_type::dash && tokens[i + 2].type != details::token_type::gt){
                     comment += tokens[i++].value + " ";
                 }
-                i += 3;
+                i += 3;// skip -->
                 auto commentNode = std::make_unique<node>(details::node_type::COMMENT_NODE, comment);
                 element->appendChild(std::move(commentNode));
             }else if(i + 1 < tokens.size() && tokens[i].type == details::token_type::lt && tokens[i + 1].type == details::token_type::question){
-                i += 2;
+                i += 2;// skip <?
                 std::string pi;
                 while(i + 1 < tokens.size() && tokens[i].type != details::token_type::question){
                     if(tokens[i].type == details::token_type::identifier && tokens[i + 1].type == details::token_type::equals){
@@ -221,7 +222,7 @@ namespace miniXML{
         case details::node_type::COMMENT_NODE:{
             std::string comment = n.getValue();
             if(!comment.empty()){
-                comment.pop_back();
+                comment.pop_back();// it allways has a whitespace at the end, due to the parsing
             }
             file << ind << "<!--" << comment << "-->" << "\n";
             break;

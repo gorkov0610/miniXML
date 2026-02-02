@@ -1,6 +1,7 @@
 #pragma once
 #include <string>
-
+// Primitive internal types used across the library
+// Uses a special namespace to avoid namespace pollution
 namespace miniXML::details{
     enum class token_type{
         lt, gt, slash, equals,

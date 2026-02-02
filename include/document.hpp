@@ -3,10 +3,11 @@
 #include <fstream>
 #include <sstream>
 
-
+// The implementation of the document class as a top level controller of the tree.
 namespace miniXML{
     class document{
         public:
+            //constructor used for reading from a file
             document(const std::string& filepath) : root(details::node_type::DOCUMENT_NODE, "") {
                 std::ifstream f(filepath);
                 if(!f){
@@ -20,12 +21,13 @@ namespace miniXML{
                 tokenize();
                 buildTree();
             }
+            //constructor used for generating a document
             document() : root(details::node_type::DOCUMENT_NODE, ""){}
 
-            node& rootNode() noexcept {
+            [[nodiscard]] node& rootNode() noexcept {
                 return root;
             }
-            const node& rootNode() const noexcept {
+            [[nodiscard]] const node& rootNode() const noexcept {
                 return root;
             }
             void writeToFile(const std::string& filepath, int depth = 0) const {
@@ -34,7 +36,6 @@ namespace miniXML{
                     writeNode(*c, file, depth);    
                 }
             }
-
             void parseFromString(std::string_view xmlContent){
                 content.assign(xmlContent);
                 tokens.clear();
@@ -47,6 +48,7 @@ namespace miniXML{
             std::string content;
             std::vector<details::token> tokens;
 
+            //defined in parser.hpp
             void tokenize();
             void buildTree();
             std::unique_ptr<node> parseElement(int& i);
