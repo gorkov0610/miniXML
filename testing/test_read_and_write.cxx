@@ -1,4 +1,4 @@
-#include "..\include\document.hpp"
+#include "..\include\miniXML\document.hpp"
 
 
 using namespace miniXML;

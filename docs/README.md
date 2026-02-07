@@ -28,10 +28,35 @@ miniXML is intentionally minimal. It doesn't support:
 - Advanced encodings (currently only UTF-8)
 
 ## Installation
+### 1. Single include (header-only)  
 Simply copy the `miniXML` headers in your project, and include `document.hpp`.
 ```cpp
 #include "include/document.hpp"
 ```
+### 2. Using CMake  
+If you want to manage dependencies via CMake, the library provides an **INTERFACE** target.
+```
+cmake_minimum_required(VERSION 3.15)
+project(MyProject)
+
+add_executable(MyExecutable main.cpp)
+
+# Add miniXML
+add_subdirectory(path/to/miniXML)
+
+# Link the interaface target
+target_link_libraries(MyExecutable PRIVATE miniXML)
+
+set_target_properties(
+    MyExecutable PROPERTIES
+    CXX_STANDARD 17
+    CXX_STANDARD_REQUIRED YES
+)
+```      
+- `path/to/miniXML` should point to the folder containing `miniXML` and its `CMakeLists.txt`.   
+- The `miniXML` folder should be the root folder containing `CMakeLists.txt` and `include/`.
+- This makes the project aware of the headers without modifying them.   
+- The library is header-only, so no compilation is required beyond including the headers.
 ## Basic usage
 ```cpp
 #include "include/document.hpp"
@@ -46,7 +71,7 @@ int main(){
     std::cout << prolog->toString();
     return 0;
 }
-```  
+```
 Compile this and run it and you should get `<xml version='1.0' encoding='UTF-8'>`, or the prolog of the document.  
 ```cpp
 #include "include/document.hpp"
@@ -73,7 +98,7 @@ int main(){
     d.writeToFile("generated.xml");
     return 0;
 }
-```  
+```
 This is how you would generate a file using the library.  
 ```cpp
 #include "include/document.hpp"
@@ -100,7 +125,7 @@ int main(){
     }
     return 0;
 }
-```  
+```
 **Note:** for this example you need the `file.xml` in the `testing` folder.   
 This should inform if a certain node is present in the file and if it has attributes, it will print them.
 ## Requirements
@@ -112,5 +137,6 @@ This should inform if a certain node is present in the file and if it has attrib
 - Internal parsing types are kept in `miniXML::details`
 - Memory is managed using `std::unique_ptr`
 - Parsing and writing logic is separated in `parser.hpp`
+- Works with *GCC*, *Clang* and *MSVC*
 ## License
 miniXML is released under the MIT License. See `LICENSE` for more details.
