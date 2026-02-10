@@ -6,6 +6,7 @@
 #include <algorithm>
 #include "types.hpp"
 
+
 // Main tree implementation.
 namespace miniXML{  
     class node{
@@ -32,6 +33,9 @@ namespace miniXML{
             const std::unordered_map<std::string, std::string>& getAttributes() const{
                 return attributes;
             }
+            const namespaceInfo* getNamespce() const noexcept {
+                return ns;
+            }
             //setters
             void setType(const details::node_type n) noexcept {
                 type = n;
@@ -40,6 +44,9 @@ namespace miniXML{
                 value.assign(n);
             }
             [[nodiscard]] std::string toString(int depth = 0) const {
+                if(depth < 0){
+                    depth = 0;
+                }
                 const std::string ind(depth * 2, ' ');
                 std::string xml;
                 xml += ind;
@@ -102,6 +109,9 @@ namespace miniXML{
                 n->parent = this;
                 children.push_back(std::move(n));
                 return children.back().get();
+            }
+            void appendNamespace(const std::string_view key, const miniXML::details::namespaceInfo& ns){
+                namespaces.insert_or_assign(std::string(key), ns);
             }
             [[nodiscard]] bool deleteAttribute(const std::string& key){
                 auto it = attributes.find(key);
@@ -220,7 +230,9 @@ namespace miniXML{
             std::string value;
             std::vector<std::unique_ptr<node>> children;
             std::unordered_map<std::string, std::string> attributes;
+            std::unordered_map<std::string, miniXML::details::namespaceInfo> namespaces;
             node* parent = nullptr;
+            const details::namespaceInfo* ns = nullptr;
 
             friend class document;
     };

@@ -23,4 +23,9 @@ namespace miniXML::details{
         token_type type;
         std::string value;
     };
+    struct namespaceInfo{
+        std::string prefix;
+        std::string url;
+    };
+    
 };

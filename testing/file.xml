@@ -11,7 +11,7 @@
     </text>
     <subject encoding='ASCII'>
         <!--Another comment-->
-        XML
+        &lt;XML&gt;
     </subject>
     <!--This should go before closing note-->
 </note>

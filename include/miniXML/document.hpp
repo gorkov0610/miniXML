@@ -11,7 +11,7 @@ namespace miniXML{
             document(const std::string& filepath) : root(details::node_type::DOCUMENT_NODE, "") {
                 std::ifstream f(filepath);
                 if(!f){
-                    throw std::runtime_error("Failed to open file");
+                    throw std::runtime_error("Failed to open file: " + filepath);
                 }
                 std::stringstream buffer;
                 
@@ -31,6 +31,9 @@ namespace miniXML{
                 return root;
             }
             void writeToFile(const std::string& filepath, int depth = 0) const {
+                if(depth < 0){
+                    depth = 0;
+                }
                 std::ofstream file(filepath);
                 for(const auto& c : root.getChildren()){
                     writeNode(*c, file, depth);    
@@ -53,6 +56,7 @@ namespace miniXML{
             void buildTree();
             std::unique_ptr<node> parseElement(int& i);
             void writeNode(const node& n, std::ostream& file, int depth = 0) const;
+            void resolveNamespace(node* n);
    };
 }
 

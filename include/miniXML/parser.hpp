@@ -1,5 +1,8 @@
 #pragma once
 #include "document.hpp"
+#include "entities.hpp"
+#include <iostream>
+
 // Internal implementation of miniXML::document parsing and serialization.
 // Separated to keep document.hpp minimal and stable.
 namespace miniXML{
@@ -71,7 +74,7 @@ namespace miniXML{
             }else if(i + 1 < tokens.size() && tokens[i].type == details::token_type::lt && tokens[i + 1].type == details::token_type::exclamation){
                 i += 4;// skip <!--
                 std::string comment;
-                while(i + 2 < tokens.size() && tokens[i].type != details::token_type::dash && tokens[i + 1].type != details::token_type::dash && tokens[i + 2].type != details::token_type::gt){
+                while(i + 2 < tokens.size() && !(tokens[i].type == details::token_type::dash && tokens[i + 1].type == details::token_type::dash && tokens[i + 2].type == details::token_type::gt)){
                     comment += tokens[i++].value + " ";
                 }
                 i += 3;// skip -->
@@ -112,8 +115,17 @@ namespace miniXML{
             std::string attName = tokens[i++].value;
             ++i;// skip the =
             std::string attValue = tokens[i++].value;
-            element->appendAttribute(attName, attValue);
+
+            if(attName == "xmlns"){
+                element->appendNamespace("", {"", attValue});
+            }else if(attName.rfind("xmlns:", 0) == 0){
+                std::string prefix = attName.substr(6);
+                element->appendNamespace(prefix, {prefix, attValue});
+            }else{
+                element->appendAttribute(attName, attValue);
+            }
         }
+        resolveNamespace(element.get());
         if(i + 1 < tokens.size() && tokens[i].type == details::token_type::slash && tokens[i + 1].type == details::token_type::gt){
             i += 2;// skip />
             return element;
@@ -124,8 +136,8 @@ namespace miniXML{
         if(i + 1 < tokens.size() && tokens[i].type == details::token_type::lt && tokens[i + 1].type == details::token_type::exclamation){
             i += 4;// skip <!--
             std::string comment;
-            while(i + 2 < tokens.size() && tokens[i].type != details::token_type::dash && tokens[i + 1].type != details::token_type::dash && tokens[i + 2].type != details::token_type::gt){
-                    comment += tokens[i++].value + " ";
+            while(i + 2 < tokens.size() && !(tokens[i].type == details::token_type::dash && tokens[i + 1].type == details::token_type::dash && tokens[i + 2].type == details::token_type::gt)){ 
+                comment += tokens[i++].value + " ";
             }
             i += 3;// skip -->
             auto commentNode = std::make_unique<node>(details::node_type::COMMENT_NODE, comment);
@@ -143,11 +155,12 @@ namespace miniXML{
                 if(!text.empty()){
                     text.pop_back();
                 }
+                text = miniXML::details::decodeEntities(text);
                 element->appendChild(std::make_unique<node>(details::node_type::TEXT_NODE, text));
             }else if(i + 1 < tokens.size() && tokens[i].type == details::token_type::lt && tokens[i + 1].type == details::token_type::exclamation){
                 i += 4;//skip <!--
                 std::string comment;
-                while(i + 2 < tokens.size() && tokens[i].type != details::token_type::dash && tokens[i + 1].type != details::token_type::dash && tokens[i + 2].type != details::token_type::gt){
+                while(i + 2 < tokens.size() && !(tokens[i].type == details::token_type::dash && tokens[i + 1].type == details::token_type::dash && tokens[i + 2].type == details::token_type::gt)){
                     comment += tokens[i++].value + " ";
                 }
                 i += 3;// skip -->
@@ -179,7 +192,7 @@ namespace miniXML{
             std::string closing_name = tokens[i + 2].value;
 
             if(closing_name != name){
-                throw std::runtime_error("Closing tag of " + name + " doesn't match!");
+                throw std::runtime_error("Mismatched closing tag: " + name);
             }
             i += 3; // skip </name
 
@@ -228,7 +241,7 @@ namespace miniXML{
             break;
         }
         case details::node_type::TEXT_NODE:{
-            file << ind << n.getValue() << "\n";
+            file << ind << details::encodeEntities(n.getValue()) << "\n";
             break;
         }
         case details::node_type::PROCESSING_INSTRUCTION_NODE:{
@@ -238,5 +251,24 @@ namespace miniXML{
         default:
             break;
         }
+    }
+
+    inline void document::resolveNamespace(node* n){
+        if(!n || n->getType() != miniXML::details::node_type::ELEMENT_NODE){
+            return ;
+        }
+        auto colon = n->getValue().find(':', 0);
+        std::string prefix = (colon == std::string::npos) ? "" : n->getValue().substr(0, colon);
+        auto current = n;
+        while(current){
+            auto it = current->namespaces.find(prefix);
+            if(it != current->namespaces.end()){
+                n->ns = &it->second;
+                return ;
+            }
+            current = current->getParent();
+        }
+
+        n->ns = nullptr;
     }
 };
