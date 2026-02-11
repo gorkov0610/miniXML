@@ -20,6 +20,7 @@ namespace miniXML{
                 content = buffer.str();
                 tokenize();
                 buildTree();
+                resolveAllNamespaces();
             }
             //constructor used for generating a document
             document() : root(details::node_type::DOCUMENT_NODE, ""){}
@@ -45,6 +46,7 @@ namespace miniXML{
                 root.clearChildren();
                 tokenize();
                 buildTree();
+                resolveAllNamespaces();
             }
         private:
             node root;
@@ -56,7 +58,9 @@ namespace miniXML{
             void buildTree();
             std::unique_ptr<node> parseElement(int& i);
             void writeNode(const node& n, std::ostream& file, int depth = 0) const;
-            void resolveNamespace(node* n);
+            void resolveElementNamespace(node* n);
+            void resolveAttributeNamespace(node* n);
+            void resolveAllNamespaces();
    };
 }
 

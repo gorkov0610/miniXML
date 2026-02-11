@@ -27,5 +27,11 @@ namespace miniXML::details{
         std::string prefix;
         std::string url;
     };
+    struct attribute{
+        std::string qualifiedName;
+        std::string localName;
+        std::string value;
+        namespaceInfo* ns;
+    };
     
 };

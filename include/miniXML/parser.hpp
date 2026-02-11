@@ -2,6 +2,7 @@
 #include "document.hpp"
 #include "entities.hpp"
 #include <iostream>
+#include <functional>
 
 // Internal implementation of miniXML::document parsing and serialization.
 // Separated to keep document.hpp minimal and stable.
@@ -68,6 +69,7 @@ namespace miniXML{
         while(i < tokens.size()){
             if(i + 1 < tokens.size() && tokens[i].type == details::token_type::lt && tokens[i + 1].type == details::token_type::identifier){
                 auto child = parseElement(i);
+
                 if(child){
                     root.appendChild(std::move(child));
                 }
@@ -125,7 +127,6 @@ namespace miniXML{
                 element->appendAttribute(attName, attValue);
             }
         }
-        resolveNamespace(element.get());
         if(i + 1 < tokens.size() && tokens[i].type == details::token_type::slash && tokens[i + 1].type == details::token_type::gt){
             i += 2;// skip />
             return element;
@@ -210,9 +211,9 @@ namespace miniXML{
             file << ind << "<" << n.getValue();
             
             for(const auto& a : n.getAttributes()){
-                file << ' ' << a.first << "=\"";
-                if(!a.second.empty()){
-                    file << a.second << "\"";
+                file << ' ' << a.qualifiedName << "=\"";
+                if(!a.value.empty()){
+                    file << a.value << "\"";
                 }else{
                     file << "\"";
                 }
@@ -253,7 +254,7 @@ namespace miniXML{
         }
     }
 
-    inline void document::resolveNamespace(node* n){
+    inline void document::resolveElementNamespace(node* n){
         if(!n || n->getType() != miniXML::details::node_type::ELEMENT_NODE){
             return ;
         }
@@ -263,12 +264,62 @@ namespace miniXML{
         while(current){
             auto it = current->namespaces.find(prefix);
             if(it != current->namespaces.end()){
-                n->ns = &it->second;
+                if(it->second.url.empty()){
+                    n->ns = nullptr;
+                }else{
+                    n->ns = &it->second;
+                }
                 return ;
             }
             current = current->getParent();
         }
-
         n->ns = nullptr;
+    }
+    inline void document::resolveAttributeNamespace(node* n){
+        if(!n || n->getType() != miniXML::details::node_type::ELEMENT_NODE){
+            return ;
+        }
+
+        for(auto& a : n->attributes){
+            auto colon = a.qualifiedName.find(":", 0);
+            if(colon == std::string::npos){
+                a.localName = a.qualifiedName;
+                a.ns = nullptr;
+                continue;
+            }
+            std::string prefix = a.qualifiedName.substr(0, colon);
+            a.localName = a.qualifiedName.substr(colon + 1);
+
+            auto current = n;
+            while(current){
+                auto it = current->namespaces.find(prefix);
+                if(it != current->namespaces.end()){
+                    a.ns = &it->second;
+                    break;
+                }
+                if(!current->getParent()){
+                }
+                current = current->getParent();
+            }
+
+            if(!current){
+                a.ns = nullptr;
+            }
+        }
+    }
+    inline void document::resolveAllNamespaces(){
+        std::function<void(node *)> resolve = [&](node* n){
+            if(!n){
+                return ;
+            }
+
+            resolveElementNamespace(n);
+            resolveAttributeNamespace(n);
+
+            for(auto& c : n->getChildren()){
+                resolve(c.get());
+            }
+        };
+        resolve(&root);
     }
 };

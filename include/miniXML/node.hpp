@@ -30,10 +30,10 @@ namespace miniXML{
             const node* getParent() const noexcept {
                 return parent;
             }
-            const std::unordered_map<std::string, std::string>& getAttributes() const{
+            const std::vector<miniXML::details::attribute>& getAttributes() const{
                 return attributes;
             }
-            const namespaceInfo* getNamespce() const noexcept {
+            const miniXML::details::namespaceInfo* getNamespce() const noexcept {
                 return ns;
             }
             //setters
@@ -71,8 +71,8 @@ namespace miniXML{
                         std::string element = "<" + value;
 
                         for(const auto& a : attributes){
-                            element += " " + a.first + "=\"";
-                            element += a.second;
+                            element += " " + a.qualifiedName + "=\"";
+                            element += a.value;
                             element += "\"";
                         }
             
@@ -102,8 +102,8 @@ namespace miniXML{
                 }
                 return xml;
             }
-            void appendAttribute(const std::string_view key, const std::string_view value){
-                attributes.insert_or_assign(std::string(key), std::string(value));
+            void appendAttribute(const std::string key, const std::string value){
+                attributes.push_back({std::move(key), {}, std::move(value), nullptr});
             }
             node* appendChild(std::unique_ptr<node> n){
                 n->parent = this;
@@ -113,8 +113,11 @@ namespace miniXML{
             void appendNamespace(const std::string_view key, const miniXML::details::namespaceInfo& ns){
                 namespaces.insert_or_assign(std::string(key), ns);
             }
-            [[nodiscard]] bool deleteAttribute(const std::string& key){
-                auto it = attributes.find(key);
+            [[nodiscard]] bool deleteAttribute(const miniXML::details::attribute& key){
+                auto it = std::find_if(attributes.begin(), attributes.end(), [key](const miniXML::details::attribute& a){
+                    return key.localName == a.localName && key.qualifiedName == a.qualifiedName && key.value == a.value;
+                });
+
                 if(it == attributes.end()){
                     return false;
                 }
@@ -150,12 +153,21 @@ namespace miniXML{
             void clearAttributes(){
                 attributes.clear();
             }
-            [[nodiscard]] std::optional<std::string> getAttribute(const std::string& key) const{
-                auto it = attributes.find(key);
-                if(it == attributes.end()){
-                    return std::nullopt;
+            [[nodiscard]] const miniXML::details::attribute* getAttribute(std::string_view key) const noexcept {
+                for(const auto& a : attributes){
+                    if(a.ns == nullptr && a.localName == key){
+                        return &a;
+                    }
                 }
-                return it->second;
+                return nullptr;
+            }
+            [[nodiscard]] const miniXML::details::attribute* getAttributeNS(std::string_view key, std::string_view uri) const noexcept {
+                for(const auto& a : attributes){
+                    if(a.ns && a.ns->url == uri && a.localName == key){
+                        return &a;
+                    }
+                }
+                return nullptr;
             }
             [[nodiscard]] node* findChild(const details::node_type t){
                 const auto it = std::find_if(children.begin(), children.end(), [t](const std::unique_ptr<node>&n){
@@ -229,10 +241,10 @@ namespace miniXML{
             details::node_type type;
             std::string value;
             std::vector<std::unique_ptr<node>> children;
-            std::unordered_map<std::string, std::string> attributes;
+            std::vector<miniXML::details::attribute> attributes;
             std::unordered_map<std::string, miniXML::details::namespaceInfo> namespaces;
             node* parent = nullptr;
-            const details::namespaceInfo* ns = nullptr;
+            const miniXML::details::namespaceInfo* ns = nullptr;
 
             friend class document;
     };
