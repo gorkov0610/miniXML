@@ -32,7 +32,7 @@ namespace miniXML::details{
     std::string decodeEntities(std::string_view text){
         std::string result;
         result.reserve(text.size());
-        for(auto i{0}; i < text.size(); i++){
+        for(size_t i{0}; i < text.size(); i++){
             if(text[i] == '&'){
                 if(text.compare(i, 5, "&amp;") == 0){
                     result += "&";

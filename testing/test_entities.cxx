@@ -8,9 +8,9 @@ int main(){
     document d("file.xml");
     auto& root = d.rootNode();
 
-    auto note = root.findChild("note");
-    auto newNode = std::make_unique<node>(node_type::ELEMENT_NODE, "new");
-    auto text = std::make_unique<node>(node_type::TEXT_NODE, "2 < 3");
+    auto note = root.findChild<elementNode>("note");
+    auto newNode = std::make_unique<elementNode>("new");
+    auto text = std::make_unique<textNode>("2 < 3");
     newNode->appendChild(std::move(text));
     note->appendChild(std::move(newNode));
 

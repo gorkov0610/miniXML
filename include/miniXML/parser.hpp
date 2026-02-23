@@ -1,14 +1,13 @@
 #pragma once
 #include "document.hpp"
 #include "entities.hpp"
-#include <iostream>
 #include <functional>
 
 // Internal implementation of miniXML::document parsing and serialization.
 // Separated to keep document.hpp minimal and stable.
 namespace miniXML{
     inline void document::tokenize(){
-        int i = 0;
+        size_t i = 0;
         while(i < content.size()){
             std::string s;
             char quote;
@@ -65,7 +64,7 @@ namespace miniXML{
     }
 
     inline void document::buildTree(){
-        auto i{0};
+        size_t i{0};
         while(i < tokens.size()){
             if(i + 1 < tokens.size() && tokens[i].type == details::token_type::lt && tokens[i + 1].type == details::token_type::identifier){
                 auto child = parseElement(i);
@@ -80,8 +79,8 @@ namespace miniXML{
                     comment += tokens[i++].value + " ";
                 }
                 i += 3;// skip -->
-                auto commentNode = std::make_unique<node>(details::node_type::COMMENT_NODE, comment);
-                root.appendChild(std::move(commentNode));
+                auto commentChild = std::make_unique<commentNode>(comment);
+                root.appendChild(std::move(commentChild));
             }else if(i + 1 < tokens.size() && tokens[i].type == details::token_type::lt && tokens[i + 1].type == details::token_type::question){
                 i += 2;// skip <?
                 std::string pi;
@@ -97,7 +96,7 @@ namespace miniXML{
                     }
                     i++;
                 }
-                auto piNode = std::make_unique<node>(details::node_type::PROCESSING_INSTRUCTION_NODE, pi);
+                auto piNode = std::make_unique<processingInstructionNode>(pi);
                 root.appendChild(std::move(piNode));
             }else{
                 i++;// go on the next token
@@ -105,24 +104,24 @@ namespace miniXML{
         }
     }
 
-    inline std::unique_ptr<node> document::parseElement(int& i){
+    inline std::unique_ptr<node> document::parseElement(size_t& i){
         if(i + 1 >= tokens.size() || tokens[i].type != details::token_type::lt){
             return nullptr;
         }
         ++i;
 
         std::string name = tokens[i++].value;
-        auto element = std::make_unique<node>(details::node_type::ELEMENT_NODE, name);
+        auto element = std::make_unique<elementNode>(name);
         while(i + 1 < tokens.size() && tokens[i].type == details::token_type::identifier && tokens[i + 1].type == details::token_type::equals){
             std::string attName = tokens[i++].value;
             ++i;// skip the =
             std::string attValue = tokens[i++].value;
 
             if(attName == "xmlns"){
-                element->appendNamespace("", {"", attValue});
+                element->registerNamespace("", attValue);
             }else if(attName.rfind("xmlns:", 0) == 0){
                 std::string prefix = attName.substr(6);
-                element->appendNamespace(prefix, {prefix, attValue});
+                element->registerNamespace(prefix, attValue);
             }else{
                 element->appendAttribute(attName, attValue);
             }
@@ -141,8 +140,8 @@ namespace miniXML{
                 comment += tokens[i++].value + " ";
             }
             i += 3;// skip -->
-            auto commentNode = std::make_unique<node>(details::node_type::COMMENT_NODE, comment);
-            element->appendChild(std::move(commentNode));
+            auto commentChild= std::make_unique<commentNode>(comment);
+            element->appendChild(std::move(commentChild));
         }
 
         while(i + 1 < tokens.size() && !(tokens[i].type == details::token_type::lt && tokens[i + 1].type == details::token_type::slash)){
@@ -157,7 +156,7 @@ namespace miniXML{
                     text.pop_back();
                 }
                 text = miniXML::details::decodeEntities(text);
-                element->appendChild(std::make_unique<node>(details::node_type::TEXT_NODE, text));
+                element->appendChild(std::make_unique<textNode>(text));
             }else if(i + 1 < tokens.size() && tokens[i].type == details::token_type::lt && tokens[i + 1].type == details::token_type::exclamation){
                 i += 4;//skip <!--
                 std::string comment;
@@ -165,8 +164,8 @@ namespace miniXML{
                     comment += tokens[i++].value + " ";
                 }
                 i += 3;// skip -->
-                auto commentNode = std::make_unique<node>(details::node_type::COMMENT_NODE, comment);
-                element->appendChild(std::move(commentNode));
+                auto commentChild = std::make_unique<commentNode>(comment);
+                element->appendChild(std::move(commentChild));
             }else if(i + 1 < tokens.size() && tokens[i].type == details::token_type::lt && tokens[i + 1].type == details::token_type::question){
                 i += 2;// skip <?
                 std::string pi;
@@ -182,7 +181,7 @@ namespace miniXML{
                     }
                     i++;
                 }
-                auto piNode = std::make_unique<node>(details::node_type::PROCESSING_INSTRUCTION_NODE, pi);
+                auto piNode = std::make_unique<processingInstructionNode>(pi);
                 element->appendChild(std::move(piNode));
             }else{
                 i++;
@@ -204,102 +203,58 @@ namespace miniXML{
         return element;
     }
 
-    inline void document::writeNode(const node& n, std::ostream& file, int depth) const {
-        const std::string ind(depth * 2, ' ');
-        switch (n.getType()){
-        case details::node_type::ELEMENT_NODE:{
-            file << ind << "<" << n.getValue();
-            
-            for(const auto& a : n.getAttributes()){
-                file << ' ' << a.qualifiedName << "=\"";
-                if(!a.value.empty()){
-                    file << a.value << "\"";
-                }else{
-                    file << "\"";
-                }
-            }
-
-            if(n.getChildren().empty()){
-                file << "/>\n";
-                return;    
-            }
-            
-            file << ">\n";
-
-            for(const auto& c : n.getChildren()){
-                writeNode(*c, file, depth + 1);
-            }
-
-            file << ind << "</" + n.getValue() + ">\n";
-            break;
-        }
-        case details::node_type::COMMENT_NODE:{
-            std::string comment = n.getValue();
-            if(!comment.empty()){
-                comment.pop_back();// it allways has a whitespace at the end, due to the parsing
-            }
-            file << ind << "<!--" << comment << "-->" << "\n";
-            break;
-        }
-        case details::node_type::TEXT_NODE:{
-            file << ind << details::encodeEntities(n.getValue()) << "\n";
-            break;
-        }
-        case details::node_type::PROCESSING_INSTRUCTION_NODE:{
-            file << ind << "<?" << n.getValue() << "?>\n";
-            break;
-        }
-        default:
-            break;
-        }
-    }
-
-    inline void document::resolveElementNamespace(node* n){
-        if(!n || n->getType() != miniXML::details::node_type::ELEMENT_NODE){
+    inline void document::resolveElementNamespace(elementNode* n){
+        if(!n){
             return ;
         }
-        auto colon = n->getValue().find(':', 0);
-        std::string prefix = (colon == std::string::npos) ? "" : n->getValue().substr(0, colon);
+        std::string prefix = n->getPrefix();
         auto current = n;
         while(current){
             auto it = current->namespaces.find(prefix);
             if(it != current->namespaces.end()){
-                if(it->second.url.empty()){
+                 if(it->second->url.empty()){
                     n->ns = nullptr;
                 }else{
-                    n->ns = &it->second;
-                }
+                    n->ns = it->second.get();
+                }   
                 return ;
             }
-            current = current->getParent();
+            auto parent = current->getParent();
+            if(!parent || parent->getType() != details::node_type::ELEMENT_NODE){
+                current = nullptr;
+            }else{
+                current = dynamic_cast<elementNode*>(parent);
+            }
+            
         }
         n->ns = nullptr;
     }
-    inline void document::resolveAttributeNamespace(node* n){
-        if(!n || n->getType() != miniXML::details::node_type::ELEMENT_NODE){
+    inline void document::resolveAttributeNamespace(elementNode* n){
+        if(!n){
             return ;
         }
 
-        for(auto& a : n->attributes){
-            auto colon = a.qualifiedName.find(":", 0);
-            if(colon == std::string::npos){
-                a.localName = a.qualifiedName;
+        for(auto& a : n->getAttributes()){
+            if(a.prefix.empty()){
                 a.ns = nullptr;
                 continue;
             }
-            std::string prefix = a.qualifiedName.substr(0, colon);
-            a.localName = a.qualifiedName.substr(colon + 1);
+            std::string prefix = a.prefix;
 
             auto current = n;
             while(current){
                 auto it = current->namespaces.find(prefix);
                 if(it != current->namespaces.end()){
-                    a.ns = &it->second;
+                    a.ns = it->second.get();
                     break;
-                }
-                if(!current->getParent()){
-                }
-                current = current->getParent();
+                }   
+                auto parent = current->getParent();
+                if(!parent || parent->getType() != details::node_type::ELEMENT_NODE){
+                    current = nullptr;
+                }else{
+                    current = dynamic_cast<elementNode*>(parent);
+                } 
+                
             }
 
             if(!current){
@@ -309,14 +264,15 @@ namespace miniXML{
     }
     inline void document::resolveAllNamespaces(){
         std::function<void(node *)> resolve = [&](node* n){
-            if(!n){
+            if(!n || n->getType() != details::node_type::ELEMENT_NODE){
                 return ;
             }
 
-            resolveElementNamespace(n);
-            resolveAttributeNamespace(n);
+            auto e = dynamic_cast<elementNode*>(n);
+            resolveElementNamespace(e);
+            resolveAttributeNamespace(e);
 
-            for(auto& c : n->getChildren()){
+            for(auto& c : e->getChildren()){
                 resolve(c.get());
             }
         };

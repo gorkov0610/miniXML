@@ -8,7 +8,7 @@ namespace miniXML{
     class document{
         public:
             //constructor used for reading from a file
-            document(const std::string& filepath) : root(details::node_type::DOCUMENT_NODE, "") {
+            document(const std::string& filepath) {
                 std::ifstream f(filepath);
                 if(!f){
                     throw std::runtime_error("Failed to open file: " + filepath);
@@ -23,12 +23,12 @@ namespace miniXML{
                 resolveAllNamespaces();
             }
             //constructor used for generating a document
-            document() : root(details::node_type::DOCUMENT_NODE, ""){}
+            document() = default;
 
-            [[nodiscard]] node& rootNode() noexcept {
+            [[nodiscard]] documentNode& rootNode() noexcept {
                 return root;
             }
-            [[nodiscard]] const node& rootNode() const noexcept {
+            [[nodiscard]] const documentNode& rootNode() const noexcept {
                 return root;
             }
             void writeToFile(const std::string& filepath, int depth = 0) const {
@@ -36,9 +36,10 @@ namespace miniXML{
                     depth = 0;
                 }
                 std::ofstream file(filepath);
-                for(const auto& c : root.getChildren()){
-                    writeNode(*c, file, depth);    
+                if(!file){
+                    throw std::runtime_error("Unable to open: " + filepath);
                 }
+                root.write(file, depth);
             }
             void parseFromString(std::string_view xmlContent){
                 content.assign(xmlContent);
@@ -48,18 +49,19 @@ namespace miniXML{
                 buildTree();
                 resolveAllNamespaces();
             }
+            
         private:
-            node root;
+            documentNode root;
             std::string content;
             std::vector<details::token> tokens;
 
             //defined in parser.hpp
             void tokenize();
             void buildTree();
-            std::unique_ptr<node> parseElement(int& i);
-            void writeNode(const node& n, std::ostream& file, int depth = 0) const;
-            void resolveElementNamespace(node* n);
-            void resolveAttributeNamespace(node* n);
+            std::unique_ptr<node> parseElement(size_t& i);
+
+            void resolveElementNamespace(elementNode* n);
+            void resolveAttributeNamespace(elementNode* n);
             void resolveAllNamespaces();
    };
 }

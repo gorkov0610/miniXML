@@ -6,12 +6,12 @@ using namespace miniXML::details;
 int main(){
     document d;
     //get the root
-    node& root = d.rootNode();
+    auto& root = d.rootNode();
     //create the prolog
-    auto prolog = std::make_unique<node>(node_type::PROCESSING_INSTRUCTION_NODE, "xml version=\"1.0\" encoding=\"UTF-8\"");
+    auto prolog = std::make_unique<processingInstructionNode>("xml version=\"1.0\" encoding=\"UTF-8\"");
     std::cout << "prolog created\n";
     //create the parent
-    auto parent = std::make_unique<node>(node_type::ELEMENT_NODE, "parent");
+    auto parent = std::make_unique<elementNode>("parent");
     std::cout << "parent created\n";
     //create the child
     auto child = std::make_unique<node>(node_type::ELEMENT_NODE, "child");
